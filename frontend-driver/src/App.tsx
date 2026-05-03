@@ -68,7 +68,8 @@ function App() {
     } catch (error) {}
   };
 
-  if (!data) return null;
+  // Remove the null check so the button shows up immediately
+  // if (!data) return null;
 
   return (
     <div className="fixed top-4 right-4 z-[9999] flex flex-col items-end">
@@ -91,7 +92,7 @@ function App() {
       </div>
 
       {/* Expanded Card */}
-      {isExpanded && (
+      {isExpanded && data && (
         <div className="glass expanded-card flex flex-col shadow-2xl">
           <div className="flex items-center gap-2 mb-6 text-[var(--color-grab-green)]">
             <BellRing className="w-6 h-6" />
@@ -132,7 +133,7 @@ function App() {
             {/* Songs Section */}
             <div className="space-y-3">
               <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Song Queue</h3>
-              {data.songs.length === 0 ? (
+              {(!data.songs || data.songs.length === 0) ? (
                 <div className="text-center py-8 text-gray-500">
                   <p className="text-sm">No songs requested</p>
                 </div>
@@ -158,6 +159,12 @@ function App() {
             <span>GRAB EXPERIENCE</span>
             <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
           </div>
+        </div>
+      )}
+      
+      {isExpanded && !data && (
+        <div className="glass expanded-card flex items-center justify-center py-12">
+            <p className="text-gray-400">Connecting to server...</p>
         </div>
       )}
     </div>
