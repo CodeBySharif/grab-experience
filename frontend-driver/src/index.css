@@ -7,17 +7,15 @@
   --color-grab-card: #141414;
 }
 
-html, body, #root {
-  background: transparent !important;
-  background-color: transparent !important;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-}
-
 :root {
+  background-color: transparent;
   color: white;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+body {
+  margin: 0;
+  overflow: hidden; /* Important for floating feel */
 }
 
 .glass {
