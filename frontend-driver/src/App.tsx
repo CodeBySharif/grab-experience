@@ -96,12 +96,12 @@ function App() {
   if (!data) return null;
 
   return (
-    <div className="fixed top-4 right-4 z-[9999] flex flex-col items-end">
+    <div className="flex flex-col items-end">
       
       {/* Floating Button */}
       <div 
         onClick={toggleExpand}
-        className={`floating-button ${isExpanded ? 'bg-red-500 hover:bg-red-600' : 'bg-[var(--color-grab-green)] hover:bg-[var(--color-grab-green-dark)]'}`}
+        className={`floating-button ${isExpanded ? 'bg-red-500 hover:bg-red-600' : 'bg-[var(--color-grab-green)] hover:bg-[var(--color-grab-green-dark)]'} relative`}
       >
         {isExpanded ? (
           <X className="w-8 h-8 text-white" />
