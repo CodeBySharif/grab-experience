@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Music, Thermometer, Volume2, AlertTriangle, X, ListMusic, CheckCircle, BellRing } from 'lucide-react';
 import * as signalR from '@microsoft/signalr';
 
@@ -9,6 +9,12 @@ function App() {
   const [data, setData] = useState<any>(null);
   const [newRequestCount, setNewRequestCount] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
+  
+  // Use a ref to track expanded state inside SignalR callback without restarting connection
+  const isExpandedRef = useRef(false);
+  useEffect(() => {
+    isExpandedRef.current = isExpanded;
+  }, [isExpanded]);
 
   const fetchCurrentState = useCallback(async () => {
     try {
@@ -27,8 +33,10 @@ function App() {
     }
   }, []);
 
+  // Persistent SignalR Connection
   useEffect(() => {
     fetchCurrentState();
+
     const hubUrl = (API_BASE.replace('/api', '')) + '/notificationHub';
     const connection = new signalR.HubConnectionBuilder()
       .withUrl(hubUrl, {
@@ -39,20 +47,35 @@ function App() {
       .build();
 
     connection.start()
-      .then(() => setIsConnected(true))
-      .catch(() => setIsConnected(false));
+      .then(() => {
+        setIsConnected(true);
+        console.log("SignalR Connected");
+      })
+      .catch(err => {
+        setIsConnected(false);
+        console.error("SignalR Error:", err);
+      });
 
-    connection.on("ReceiveNotification", () => {
+    connection.on("ReceiveNotification", (message) => {
+      console.log("SignalR Ping:", message);
       fetchCurrentState();
-      if (!isExpanded) setNewRequestCount(c => c + 1);
+      
+      // Increment counter ONLY if widget is NOT currently expanded
+      if (!isExpandedRef.current) {
+        setNewRequestCount(prev => prev + 1);
+      }
     });
 
-    return () => { connection.stop(); };
-  }, [fetchCurrentState, isExpanded]);
+    return () => {
+      connection.stop();
+    };
+  }, [fetchCurrentState]); // Only depends on fetchCurrentState, NOT isExpanded
 
   const toggleExpand = () => {
     const nextState = !isExpanded;
-    if (nextState) setNewRequestCount(0);
+    if (nextState) {
+      setNewRequestCount(0); // Reset exactly when opening
+    }
     setIsExpanded(nextState);
 
     try {
@@ -68,38 +91,41 @@ function App() {
     } catch (error) {}
   };
 
-  // Remove the null check so the button shows up immediately
-  // if (!data) return null;
+  if (!data) return null;
 
   return (
     <div className="fixed top-4 right-4 z-[9999] flex flex-col items-end">
       
       {/* Floating Button */}
-      <div 
-        onClick={toggleExpand}
-        className={`floating-button ${isExpanded ? 'bg-red-500' : 'bg-[var(--color-grab-green)]'} relative`}
-      >
-        {isExpanded ? (
-          <X className="w-8 h-8 text-white" />
-        ) : (
-          <>
-            <BellRing className={`w-8 h-8 text-white ${newRequestCount > 0 ? 'animate-bounce' : ''}`} />
-            {newRequestCount > 0 && (
-              <span className="request-badge">{newRequestCount}</span>
-            )}
-          </>
-        )}
-      </div>
+      {!isExpanded && (
+        <div 
+          onClick={toggleExpand}
+          className="floating-button bg-[var(--color-grab-green)] hover:scale-105 active:scale-95 transition-all relative"
+        >
+          <BellRing className={`w-8 h-8 text-white ${newRequestCount > 0 ? 'animate-bounce' : ''}`} />
+          {newRequestCount > 0 && (
+            <span className="request-badge">{newRequestCount}</span>
+          )}
+        </div>
+      )}
 
       {/* Expanded Card */}
-      {isExpanded && data && (
+      {isExpanded && (
         <div className="glass expanded-card flex flex-col shadow-2xl">
-          <div className="flex items-center gap-2 mb-6 text-[var(--color-grab-green)]">
-            <BellRing className="w-6 h-6" />
-            <h2 className="text-xl font-bold">New Requests</h2>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2 text-[var(--color-grab-green)]">
+              <BellRing className="w-6 h-6" />
+              <h2 className="text-xl font-bold">New Requests</h2>
+            </div>
+            <button 
+              onClick={toggleExpand}
+              className="p-2 hover:bg-white/10 rounded-full transition-colors"
+            >
+              <X className="w-6 h-6 text-gray-400" />
+            </button>
           </div>
           
-          <div className="overflow-y-auto custom-scrollbar pr-2 max-h-[60vh]">
+          <div className="overflow-y-auto custom-scrollbar pr-2 max-h-[65vh]">
             {/* Preferences Section */}
             {data.preferences && (
               <div className="mb-6 p-4 bg-white/5 rounded-2xl border border-white/10">
@@ -145,7 +171,7 @@ function App() {
                     </div>
                     <button 
                       onClick={() => markAsPlayed(song.id)}
-                      className="ml-2 p-2 bg-[var(--color-grab-green)]/10 hover:bg-[var(--color-grab-green)] rounded-lg text-[var(--color-grab-green)] hover:text-white"
+                      className="ml-2 p-2 bg-[var(--color-grab-green)]/10 hover:bg-[var(--color-grab-green)] rounded-lg text-[var(--color-grab-green)] hover:text-white transition-colors"
                     >
                       <CheckCircle className="w-5 h-5" />
                     </button>
@@ -156,15 +182,12 @@ function App() {
           </div>
           
           <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between text-[10px] text-gray-500">
-            <span>GRAB EXPERIENCE</span>
-            <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+            <span>GRAB EXPERIENCE V1.4</span>
+            <div className="flex items-center gap-1">
+              <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+              <span>{isConnected ? 'LIVE' : 'DISCONNECTED'}</span>
+            </div>
           </div>
-        </div>
-      )}
-      
-      {isExpanded && !data && (
-        <div className="glass expanded-card flex items-center justify-center py-12">
-            <p className="text-gray-400">Connecting to server...</p>
         </div>
       )}
     </div>
