@@ -7,20 +7,17 @@
   --color-grab-card: #141414;
 }
 
-:root {
-  background-color: transparent;
-  color: white;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+html, body, #root {
+  background: transparent !important;
+  background-color: transparent !important;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
 }
 
-body {
-  margin: 0;
-  overflow: hidden;
-  width: 100vw;
-  height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+:root {
+  color: white;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
 .glass {

@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { Thermometer, Volume2, AlertTriangle, X, CheckCircle, BellRing } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Music, Thermometer, Volume2, AlertTriangle, X, ListMusic, CheckCircle, BellRing } from 'lucide-react';
 import * as signalR from '@microsoft/signalr';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://192.168.0.143:5164/api';
@@ -9,166 +9,173 @@ function App() {
   const [data, setData] = useState<any>(null);
   const [newRequestCount, setNewRequestCount] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
-  
-  // Use a ref to track expanded state inside SignalR callback without restarting connection
-  const isExpandedRef = useRef(false);
-  useEffect(() => {
-    isExpandedRef.current = isExpanded;
-  }, [isExpanded]);
 
   const fetchCurrentState = useCallback(async () => {
     try {
-      const ts = Date.now();
-      const [prefRes, songsRes] = await Promise.all([
-        fetch(`${API_BASE}/preferences?t=${ts}`),
-        fetch(`${API_BASE}/songs?t=${ts}`)
-      ]);
-      if (prefRes.ok && songsRes.ok) {
-        const pref = await prefRes.json();
-        const songs = await songsRes.json();
-        setData({ preferences: pref, songs: songs });
+      const response = await fetch(`${API_BASE}/sessions/current`);
+      if (response.ok) {
+        const result = await response.json();
+        setData(result);
+        setNewRequestCount(result.count);
       }
     } catch (error) {
-      console.error("Fetch Error:", error);
+      console.error("Failed to fetch session state", error);
     }
   }, []);
 
-  // Persistent SignalR Connection
   useEffect(() => {
     fetchCurrentState();
 
+    // Use the base URL but remove /api if it exists to get the root for Hubs
     const hubUrl = (API_BASE.replace('/api', '')) + '/notificationHub';
+
+    // SignalR Connection
     const connection = new signalR.HubConnectionBuilder()
-      .withUrl(hubUrl, {
-        skipNegotiation: false,
-        transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling
-      })
+      .withUrl(hubUrl)
       .withAutomaticReconnect()
       .build();
 
     connection.start()
       .then(() => {
         setIsConnected(true);
-        console.log("SignalR Connected");
+        console.log("Connected to SignalR at", hubUrl);
       })
-      .catch(err => {
-        setIsConnected(false);
-        console.error("SignalR Error:", err);
-      });
+      .catch(err => console.error("SignalR Connection Error: ", err));
 
     connection.on("ReceiveNotification", (message) => {
-      console.log("SignalR Ping:", message);
+      console.log("Notification received:", message);
       fetchCurrentState();
       
-      // Increment counter ONLY if widget is NOT currently expanded
-      if (!isExpandedRef.current) {
-        setNewRequestCount(prev => prev + 1);
-      }
+      // Only show badge if NOT already looking at the list
+      setData((prev: any) => {
+        if (!isExpanded) {
+          setNewRequestCount(c => c + 1);
+        }
+        return prev;
+      });
     });
 
     return () => {
       connection.stop();
     };
-  }, [fetchCurrentState]); // Only depends on fetchCurrentState, NOT isExpanded
+  }, [fetchCurrentState, isExpanded]);
 
   const toggleExpand = () => {
     const nextState = !isExpanded;
     if (nextState) {
-      setNewRequestCount(0); // Reset exactly when opening
+      setNewRequestCount(0); // Reset count when opening
     }
     setIsExpanded(nextState);
 
+    // Tell Android to resize the floating window
     try {
       // @ts-ignore
-      if (window.Android) window.Android.resizeWidget(nextState);
-    } catch (e) {}
+      if (window.Android) {
+        // @ts-ignore
+        window.Android.resizeWidget(nextState);
+      }
+    } catch (e) {
+      console.log("Not running in Android wrapper");
+    }
   };
 
   const markAsPlayed = async (id: number) => {
     try {
       await fetch(`${API_BASE}/songs/${id}/play`, { method: 'PUT' });
       fetchCurrentState();
-    } catch (error) {}
+    } catch (error) {
+      console.error("Failed to mark as played");
+    }
   };
 
-  return (
-    <div>
-      {/* Floating Button */}
-      {!isExpanded && (
-        <div 
-          onClick={toggleExpand}
-          className="floating-button bg-[var(--color-grab-green)] hover:scale-105 active:scale-95 transition-all relative"
-        >
-          <BellRing className={`w-8 h-8 text-white ${newRequestCount > 0 ? 'animate-bounce' : ''}`} />
-          {newRequestCount > 0 && (
-            <span className="request-badge">{newRequestCount}</span>
-          )}
-        </div>
-      )}
+  if (!data) return null;
 
-      {/* Expanded Card */}
+  return (
+    <div className="fixed top-4 right-4 z-[9999] flex flex-col items-end">
+      
+      {/* Floating Button */}
+      <div 
+        onClick={toggleExpand}
+        className={`floating-button ${isExpanded ? 'bg-red-500 hover:bg-red-600' : 'bg-[var(--color-grab-green)] hover:bg-[var(--color-grab-green-dark)]'}`}
+      >
+        {isExpanded ? (
+          <X className="w-8 h-8 text-white" />
+        ) : (
+          <>
+            <BellRing className={`w-8 h-8 text-white ${newRequestCount > 0 ? 'animate-bounce' : ''}`} />
+            {newRequestCount > 0 && (
+              <span className="request-badge">{newRequestCount}</span>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Connection Indicator */}
+      <div className={`mt-1 mr-1 w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} title={isConnected ? 'Live' : 'Disconnected'}></div>
+
+      {/* Expanded Request Box */}
       {isExpanded && (
-        <div className="glass expanded-card flex flex-col shadow-2xl">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2 text-[var(--color-grab-green)]">
-              <BellRing className="w-6 h-6" />
-              <h2 className="text-xl font-bold">New Requests</h2>
-            </div>
-            <button 
-              onClick={toggleExpand}
-              className="p-2 hover:bg-white/10 rounded-full transition-colors"
-            >
-              <X className="w-6 h-6 text-gray-400" />
-            </button>
-          </div>
+        <div className="expanded-card glass text-white shadow-2xl">
           
-          <div className="overflow-y-auto custom-scrollbar pr-2 max-h-[65vh]">
-            {/* Preferences Section */}
-            {data.preferences && (
-              <div className="mb-6 p-4 bg-white/5 rounded-2xl border border-white/10">
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Ride Preferences</h3>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-sm text-gray-300">
-                      <Thermometer className="w-4 h-4" />
-                      <span>Temp Level</span>
-                    </div>
-                    <span className="text-sm font-medium">{data.preferences.tempLevel}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-sm text-gray-300">
-                      <Volume2 className="w-4 h-4" />
-                      <span>Sound Level</span>
-                    </div>
-                    <span className="text-sm font-medium">{data.preferences.soundLevel}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-sm text-gray-300">
-                      <AlertTriangle className="w-4 h-4" />
-                      <span>Urgency</span>
-                    </div>
-                    <span className="text-sm font-medium capitalize">{data.preferences.urgency}</span>
-                  </div>
+          {/* Preferences Summary */}
+          <div className="mb-6 space-y-3">
+            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Passenger Preferences</h3>
+            
+            <div className="grid grid-cols-2 gap-2">
+              <div className="bg-white/5 p-3 rounded-2xl flex items-center gap-3">
+                <Thermometer className="w-5 h-5 text-blue-400" />
+                <div>
+                  <p className="text-[10px] text-gray-400 uppercase">Temp</p>
+                  <p className="text-sm font-bold">Lvl {data.preferences?.tempLevel || '-'}</p>
                 </div>
               </div>
-            )}
-
-            {/* Songs Section */}
-            <div className="space-y-3">
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Song Queue</h3>
-              {(!data.songs || data.songs.length === 0) ? (
-                <div className="text-center py-8 text-gray-500">
-                  <p className="text-sm">No songs requested</p>
+              <div className="bg-white/5 p-3 rounded-2xl flex items-center gap-3">
+                <Volume2 className="w-5 h-5 text-purple-400" />
+                <div>
+                  <p className="text-[10px] text-gray-400 uppercase">Volume</p>
+                  <p className="text-sm font-bold">Lvl {data.preferences?.soundLevel || '-'}</p>
                 </div>
+              </div>
+            </div>
+
+            {data.preferences?.urgency === 'urgent' && (
+              <div className="bg-orange-500/20 border border-orange-500/30 p-3 rounded-2xl flex items-center gap-3 animate-pulse">
+                <AlertTriangle className="w-5 h-5 text-orange-400" />
+                <p className="text-sm font-bold text-orange-400">Passenger is in a rush!</p>
+              </div>
+            )}
+          </div>
+
+          {/* Song Queue */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <ListMusic className="w-4 h-4 text-[var(--color-grab-green)]" />
+                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Song Queue</h3>
+              </div>
+              <span className="text-[10px] bg-white/10 px-2 py-1 rounded-full">{data.queue.length} songs</span>
+            </div>
+
+            <div className="space-y-2 max-h-64 overflow-y-auto custom-scrollbar pr-1">
+              {data.queue.length === 0 ? (
+                <p className="text-center py-4 text-gray-500 text-sm italic">No pending requests</p>
               ) : (
-                data.songs.map((song: any) => (
-                  <div key={song.id} className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5">
+                data.queue.map((song: any) => (
+                  <div key={song.id} className="bg-white/5 p-2 rounded-xl flex items-center gap-3 group hover:bg-white/10 transition-colors">
+                    {song.thumbnailUrl ? (
+                      <img src={song.thumbnailUrl} className="w-12 h-9 object-cover rounded-lg" />
+                    ) : (
+                      <div className="w-12 h-9 bg-black/40 rounded-lg flex items-center justify-center">
+                        <Music className="w-4 h-4 text-gray-600" />
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-white truncate">{song.title}</p>
+                      <p className="text-sm font-semibold truncate" dangerouslySetInnerHTML={{ __html: song.title }}></p>
+                      <p className="text-[10px] text-gray-500">YouTube Queue</p>
                     </div>
                     <button 
                       onClick={() => markAsPlayed(song.id)}
-                      className="ml-2 p-2 bg-[var(--color-grab-green)]/10 hover:bg-[var(--color-grab-green)] rounded-lg text-[var(--color-grab-green)] hover:text-white transition-colors"
+                      className="w-8 h-8 rounded-full flex items-center justify-center bg-green-500/10 hover:bg-green-500 text-green-500 hover:text-white transition-all"
                     >
                       <CheckCircle className="w-5 h-5" />
                     </button>
@@ -177,20 +184,15 @@ function App() {
               )}
             </div>
           </div>
-          
-          <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between text-[10px] text-gray-500">
-            <span>GRAB EXPERIENCE V1.4</span>
-            <div className="flex items-center gap-1">
-              <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-              <span>{isConnected ? 'LIVE' : 'DISCONNECTED'}</span>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {isExpanded && !data && (
-        <div className="glass expanded-card flex items-center justify-center py-12">
-            <p className="text-gray-400 italic">Waiting for server...</p>
+          <div className="mt-6 pt-4 border-t border-white/5">
+            <button 
+              onClick={() => setIsExpanded(false)}
+              className="w-full py-2 text-xs font-bold text-gray-500 hover:text-white transition-colors"
+            >
+              Minimize Widget
+            </button>
+          </div>
         </div>
       )}
     </div>
