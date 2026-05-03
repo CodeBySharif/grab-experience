@@ -61,10 +61,22 @@ function App() {
   }, [fetchCurrentState, isExpanded]);
 
   const toggleExpand = () => {
-    if (!isExpanded) {
+    const nextState = !isExpanded;
+    if (nextState) {
       setNewRequestCount(0); // Reset count when opening
     }
-    setIsExpanded(!isExpanded);
+    setIsExpanded(nextState);
+
+    // Tell Android to resize the floating window
+    try {
+      // @ts-ignore
+      if (window.Android) {
+        // @ts-ignore
+        window.Android.resizeWidget(nextState);
+      }
+    } catch (e) {
+      console.log("Not running in Android wrapper");
+    }
   };
 
   const markAsPlayed = async (id: number) => {
