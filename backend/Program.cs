@@ -24,9 +24,10 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowAll",
         policy =>
         {
-            policy.AllowAnyOrigin()
+            policy.WithOrigins("https://grab-experience.netlify.app", "https://grab-experience-driver.netlify.app")
+                  .AllowAnyMethod()
                   .AllowAnyHeader()
-                  .AllowAnyMethod();
+                  .AllowCredentials();
         });
 });
 
