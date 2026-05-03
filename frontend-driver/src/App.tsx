@@ -26,32 +26,46 @@ function App() {
   useEffect(() => {
     fetchCurrentState();
 
+    // Use the base URL but remove /api if it exists to get the root for Hubs
+    const hubUrl = (API_BASE.replace('/api', '')) + '/notificationHub';
+
     // SignalR Connection
     const connection = new signalR.HubConnectionBuilder()
-      .withUrl("http://192.168.0.143:5164/notificationHub")
+      .withUrl(hubUrl)
       .withAutomaticReconnect()
       .build();
 
     connection.start()
       .then(() => {
         setIsConnected(true);
-        console.log("Connected to SignalR");
+        console.log("Connected to SignalR at", hubUrl);
       })
       .catch(err => console.error("SignalR Connection Error: ", err));
 
     connection.on("ReceiveNotification", (message) => {
       console.log("Notification received:", message);
       fetchCurrentState();
-      // Play a subtle sound if possible or visual cue
-      if (!isExpanded) {
-        setNewRequestCount(prev => prev + 1);
-      }
+      
+      // Only show badge if NOT already looking at the list
+      setData((prev: any) => {
+        if (!isExpanded) {
+          setNewRequestCount(c => c + 1);
+        }
+        return prev;
+      });
     });
 
     return () => {
       connection.stop();
     };
   }, [fetchCurrentState, isExpanded]);
+
+  const toggleExpand = () => {
+    if (!isExpanded) {
+      setNewRequestCount(0); // Reset count when opening
+    }
+    setIsExpanded(!isExpanded);
+  };
 
   const markAsPlayed = async (id: number) => {
     try {
@@ -69,7 +83,7 @@ function App() {
       
       {/* Floating Button */}
       <div 
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={toggleExpand}
         className={`floating-button ${isExpanded ? 'bg-red-500 hover:bg-red-600' : 'bg-[var(--color-grab-green)] hover:bg-[var(--color-grab-green-dark)]'}`}
       >
         {isExpanded ? (
