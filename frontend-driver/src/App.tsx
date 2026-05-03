@@ -91,11 +91,8 @@ function App() {
     } catch (error) {}
   };
 
-  if (!data) return null;
-
   return (
-    <div className="fixed top-4 right-4 z-[9999] flex flex-col items-end">
-      
+    <div>
       {/* Floating Button */}
       {!isExpanded && (
         <div 
