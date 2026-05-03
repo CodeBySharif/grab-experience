@@ -24,7 +24,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowAll",
         policy =>
         {
-            policy.WithOrigins("https://grab-experience.netlify.app", "https://grab-experience-driver.netlify.app")
+            policy.SetIsOriginAllowed(_ => true) // Allow any origin for now to fix connection
                   .AllowAnyMethod()
                   .AllowAnyHeader()
                   .AllowCredentials();
