@@ -190,6 +190,12 @@ function App() {
           </div>
         </div>
       )}
+
+      {isExpanded && !data && (
+        <div className="glass expanded-card flex items-center justify-center py-12">
+            <p className="text-gray-400 italic">Waiting for server...</p>
+        </div>
+      )}
     </div>
   );
 }
