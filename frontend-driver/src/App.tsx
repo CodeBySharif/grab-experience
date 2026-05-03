@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Music, Thermometer, Volume2, AlertTriangle, X, ListMusic, CheckCircle, BellRing } from 'lucide-react';
+import { Thermometer, Volume2, AlertTriangle, X, CheckCircle, BellRing } from 'lucide-react';
 import * as signalR from '@microsoft/signalr';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://192.168.0.143:5164/api';
