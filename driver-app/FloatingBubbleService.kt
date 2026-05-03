@@ -1,26 +1,30 @@
 package com.grab.driver
 
 import android.annotation.SuppressLint
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
+import android.os.Build
 import android.os.IBinder
 import android.view.*
-import android.webkit.WebSettings
+import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
-import kotlin.math.abs
+import androidx.core.app.NotificationCompat
 
 class FloatingBubbleService : Service() {
 
     private lateinit var windowManager: WindowManager
-    private lateinit var floatView: View
-    private var isExpanded = false
+    private lateinit var floatView: FrameLayout
+    private lateinit var windowParams: WindowManager.LayoutParams
+    private val channelId = "GrabDriverService"
 
-    // YOUR DRIVER PWA URL
-    private val PWA_URL = "https://grab-experience-driver.netlify.app/"
+    private val pwaUrl = "https://grab-experience-driver.netlify.app/"
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -28,18 +32,28 @@ class FloatingBubbleService : Service() {
     override fun onCreate() {
         super.onCreate()
 
-        windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        val inflater = getSystemService(Context.LAYOUT_INFLATER_SERVICE) as LayoutInflater
+        createNotificationChannel()
+        val notification = NotificationCompat.Builder(this, channelId)
+            .setContentTitle("Grab Driver Widget")
+            .setContentText("Widget is active")
+            .setSmallIcon(android.R.drawable.ic_menu_info_details)
+            .build()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(1, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        } else {
+            startForeground(1, notification)
+        }
 
-        // Create the container
+        windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         floatView = FrameLayout(this)
-        val layoutParams = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O)
+        
+        // Initial small size (Bubble only)
+        windowParams = WindowManager.LayoutParams(
+            200, 200,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             else
-                WindowManager.LayoutParams.TYPE_PHONE,
+                @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
         ).apply {
@@ -48,19 +62,38 @@ class FloatingBubbleService : Service() {
             y = 100
         }
 
-        // Add the WebView
         val webView = WebView(this).apply {
-            layoutParams = FrameLayout.LayoutParams(600, 800) // Default size
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             webViewClient = WebViewClient()
-            loadUrl(PWA_URL)
-            setBackgroundColor(0) // Transparent background
+            
+            // The Bridge
+            addJavascriptInterface(object {
+                @JavascriptInterface
+                fun resizeWidget(expanded: Boolean) {
+                    floatView.post {
+                        if (expanded) {
+                            windowParams.width = 650
+                            windowParams.height = 900
+                        } else {
+                            windowParams.width = 200
+                            windowParams.height = 200
+                        }
+                        windowManager.updateViewLayout(floatView, windowParams)
+                    }
+                }
+            }, "Android")
+
+            loadUrl(pwaUrl)
+            setBackgroundColor(0) 
         }
         
-        (floatView as FrameLayout).addView(webView)
+        floatView.addView(webView)
 
-        // Dragging Logic
         floatView.setOnTouchListener(object : View.OnTouchListener {
             private var initialX = 0
             private var initialY = 0
@@ -70,16 +103,16 @@ class FloatingBubbleService : Service() {
             override fun onTouch(v: View, event: MotionEvent): Boolean {
                 when (event.action) {
                     MotionEvent.ACTION_DOWN -> {
-                        initialX = layoutParams.x
-                        initialY = layoutParams.y
+                        initialX = windowParams.x
+                        initialY = windowParams.y
                         initialTouchX = event.rawX
                         initialTouchY = event.rawY
                         return true
                     }
                     MotionEvent.ACTION_MOVE -> {
-                        layoutParams.x = initialX + (event.rawX - initialTouchX).toInt()
-                        layoutParams.y = initialY + (event.rawY - initialTouchY).toInt()
-                        windowManager.updateViewLayout(floatView, layoutParams)
+                        windowParams.x = initialX + (event.rawX - initialTouchX).toInt()
+                        windowParams.y = initialY + (event.rawY - initialTouchY).toInt()
+                        windowManager.updateViewLayout(floatView, windowParams)
                         return true
                     }
                 }
@@ -87,7 +120,18 @@ class FloatingBubbleService : Service() {
             }
         })
 
-        windowManager.addView(floatView, layoutParams)
+        windowManager.addView(floatView, windowParams)
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val serviceChannel = NotificationChannel(
+                channelId, "Grab Driver Widget Channel",
+                NotificationManager.IMPORTANCE_LOW
+            )
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(serviceChannel)
+        }
     }
 
     override fun onDestroy() {

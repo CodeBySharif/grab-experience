@@ -36,7 +36,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startFloatingService() {
-        startService(Intent(this, FloatingBubbleService::class.java))
-        finish() // Close the settings activity, service will keep running
+        android.widget.Toast.makeText(this, "Launching Grab Widget Bubble...", android.widget.Toast.LENGTH_SHORT).show()
+        val intent = Intent(this, FloatingBubbleService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
+        finish()
     }
 }

@@ -90,7 +90,7 @@ public class SongsController : ControllerBase
 
         song.IsPlayed = true;
         await _context.SaveChangesAsync();
-
+        await _hubContext.Clients.All.SendAsync("ReceiveNotification", "Song marked as played");
         return Ok(new { status = "ok", message = "Song marked as played" });
     }
 
@@ -129,6 +129,7 @@ public class SongsController : ControllerBase
 
             results.Add(new { videoId = id, title, channelTitle = channel, thumbnailUrl = thumb });
         }
+
 
         return Ok(results);
     }

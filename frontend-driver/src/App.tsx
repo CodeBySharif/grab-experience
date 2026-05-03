@@ -12,47 +12,52 @@ function App() {
 
   const fetchCurrentState = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE}/sessions/current`);
-      if (response.ok) {
-        const result = await response.json();
-        setData(result);
-        setNewRequestCount(result.count);
+      // Add timestamp to bypass cache
+      const ts = Date.now();
+      const [prefRes, songsRes] = await Promise.all([
+        fetch(`${API_BASE}/preferences?t=${ts}`),
+        fetch(`${API_BASE}/songs?t=${ts}`)
+      ]);
+      if (prefRes.ok && songsRes.ok) {
+        const pref = await prefRes.json();
+        const songs = await songsRes.json();
+        setData({ preferences: pref, songs: songs });
       }
     } catch (error) {
-      console.error("Failed to fetch session state", error);
+      console.error("Fetch Error:", error);
     }
   }, []);
 
   useEffect(() => {
     fetchCurrentState();
 
-    // Use the base URL but remove /api if it exists to get the root for Hubs
     const hubUrl = (API_BASE.replace('/api', '')) + '/notificationHub';
 
-    // SignalR Connection
     const connection = new signalR.HubConnectionBuilder()
-      .withUrl(hubUrl)
+      .withUrl(hubUrl, {
+        skipNegotiation: false,
+        transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling
+      })
       .withAutomaticReconnect()
       .build();
 
     connection.start()
       .then(() => {
         setIsConnected(true);
-        console.log("Connected to SignalR at", hubUrl);
+        console.log("Connected to SignalR");
       })
-      .catch(err => console.error("SignalR Connection Error: ", err));
+      .catch(err => {
+        setIsConnected(false);
+        console.error("SignalR Connection Error: ", err);
+      });
 
     connection.on("ReceiveNotification", (message) => {
-      console.log("Notification received:", message);
+      console.log("Real-time Update:", message);
       fetchCurrentState();
       
-      // Only show badge if NOT already looking at the list
-      setData((prev: any) => {
-        if (!isExpanded) {
-          setNewRequestCount(c => c + 1);
-        }
-        return prev;
-      });
+      if (!isExpanded) {
+        setNewRequestCount(c => c + 1);
+      }
     });
 
     return () => {
